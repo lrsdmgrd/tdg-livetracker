@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tour de Gudenå – Livetracker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0d2333;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.2rem 0.8rem 3rem;
+    margin: 0;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.2rem; margin: 0 0 1rem; text-align: center; color: #9fd4ff; }
+
+  .tabs { display: flex; gap: 0.4rem; margin-bottom: 1.2rem; }
+  .tab-btn {
+    background: #133247; color: #9fd4ff; border: none; padding: 0.5rem 1rem;
+    border-radius: 8px; cursor: pointer; font-size: 0.95rem;
+  }
+  .tab-btn.active { background: #2e8bd1; color: #fff; }
+
+  .search-box { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; justify-content: center; }
+  input, select {
+    font-size: 1.1rem; padding: 0.55rem 0.9rem; border-radius: 8px; border: none;
+    text-align: center;
+  }
+  input#boatInput { width: 120px; }
+  button {
+    font-size: 1rem; padding: 0.55rem 1.1rem; border-radius: 8px; border: none;
+    background: #2e8bd1; color: white; cursor: pointer;
+  }
+  button:hover { background: #237ab8; }
+  button.fav-btn { background: #3a3a3a; padding: 0.55rem 0.7rem; }
+  button.fav-btn.active { background: #ffd23f; color: #222; }
+
+  .favorites-row { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: center; margin-bottom: 1rem; }
+  .favorites-row button { background: #133247; border: 1px solid #2e8bd1; font-size: 0.9rem; padding: 0.4rem 0.8rem; }
+
+  .card {
+    background: #133247; border-radius: 16px; padding: 1.6rem 1.8rem;
+    width: 100%; max-width: 380px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin-bottom: 1rem;
+  }
+  .card.pop { animation: popAnim 0.6s ease; }
+  @keyframes popAnim {
+    0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,210,63,0); }
+    30% { transform: scale(1.04); box-shadow: 0 0 30px rgba(255,210,63,0.6); }
+    100% { transform: scale(1); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  }
+
+  .boat-number { font-size: 2rem; font-weight: bold; margin-bottom: 0.6rem; }
+  .row { margin: 0.55rem 0; }
+  .row .label { font-size: 0.78rem; color: #9fd4ff; text-transform: uppercase; letter-spacing: 0.05em; }
+  .row .value { font-size: 1.3rem; font-weight: 600; }
+  .placement { font-size: 1.9rem; color: #ffd23f; }
+  .status { font-size: 0.8rem; color: #88a; margin-top: 0.8rem; }
+  .error { color: #ff6b6b; margin-top: 1rem; }
+
+  .progress-wrap { width: 100%; max-width: 380px; margin: 0.4rem 0 1rem; }
+  .progress-bar { background: #0a1c29; border-radius: 10px; height: 14px; position: relative; overflow: hidden; }
+  .progress-fill { background: linear-gradient(90deg, #2e8bd1, #9fd4ff); height: 100%; border-radius: 10px; transition: width 1s ease; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: #88a; margin-top: 0.3rem; }
+
+  #map { width: 100%; max-width: 380px; height: 220px; border-radius: 12px; margin-bottom: 1rem; }
+
+  .history { width: 100%; max-width: 380px; background: #0f283b; border-radius: 12px; padding: 0.8rem 1rem; }
+  .history h3 { font-size: 0.85rem; color: #9fd4ff; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .history-item { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.3rem 0; border-bottom: 1px solid #1c3a52; }
+  .history-item:last-child { border-bottom: none; }
+  .history-item .h-name { color: #fff; }
+  .history-item .h-time { color: #9fd4ff; }
+  .history-item .h-split { color: #ffd23f; font-size: 0.8rem; }
+
+  table { width: 100%; max-width: 480px; border-collapse: collapse; background: #133247; border-radius: 12px; overflow: hidden; }
+  th, td { padding: 0.6rem 0.7rem; text-align: left; font-size: 0.9rem; }
+  th { background: #0f283b; color: #9fd4ff; font-size: 0.75rem; text-transform: uppercase; }
+  tr:nth-child(even) { background: #0f283b55; }
+  td.rank { font-weight: bold; color: #ffd23f; }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<h1>🛶 Tour de Gudenå — Livetracker</h1>
+
+<div class="tabs">
+  <button class="tab-btn active" id="tabSearchBtn" onclick="switchTab('search')">Søg båd</button>
+  <button class="tab-btn" id="tabLeaderboardBtn" onclick="switchTab('leaderboard')">Leaderboard</button>
+</div>
+
+<!-- SØG BÅD -->
+<div id="searchTab">
+  <div class="search-box">
+    <input type="text" id="boatInput" placeholder="Bådnr." inputmode="numeric">
+    <button onclick="startTracking()">Find</button>
+    <button class="fav-btn" id="favToggleBtn" onclick="toggleFavorite()">★</button>
+  </div>
+
+  <div class="favorites-row" id="favoritesRow"></div>
+
+  <div id="result"></div>
+  <div id="mapContainer" class="hidden"><div id="map"></div></div>
+  <div id="historyContainer" class="hidden"></div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboardTab" class="hidden">
+  <div class="search-box">
+    <select id="klasseSelect" onchange="loadLeaderboard()">
+      <option value="">Alle klasser</option>
+    </select>
+  </div>
+  <div id="leaderboardResult"></div>
+</div>
+
+<audio id="popSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav">
+</audio>
+
+<script>
+// ---- INDSÆT DIN APPS SCRIPT WEB APP URL HER ----
+const API_URL = "https://script.google.com/macros/s/AKfycbwC3a8LSVWhg-Wo7oB2fEaPKh3uY9Inf-T1Rc_dcQz5AxhmKLxH9piQl6lxiJdEn8zf/exec";
+
+let pollTimer = null;
+let lastUpdateTime = null;
+let lastCheckpointSeen = null;
+let map = null;
+let mapMarker = null;
+let tickerTimer = null;
+
+// ================= FAVORITTER (localStorage) =================
+function getFavorites() {
+  return JSON.parse(localStorage.getItem('gudenaa_favorites') || '[]');
+}
+function saveFavorites(list) {
+  localStorage.setItem('gudenaa_favorites', JSON.stringify(list));
+}
+function renderFavorites() {
+  const row = document.getElementById('favoritesRow');
+  const favs = getFavorites();
+  row.innerHTML = favs.map(b => `<button onclick="document.getElementById('boatInput').value='${b}'; startTracking();">★ ${b}</button>`).join('');
+}
+function toggleFavorite() {
+  const boat = document.getElementById('boatInput').value.trim();
+  if (!boat) return;
+  let favs = getFavorites();
+  const btn = document.getElementById('favToggleBtn');
+  if (favs.includes(boat)) {
+    favs = favs.filter(b => b !== boat);
+    btn.classList.remove('active');
+  } else {
+    favs.push(boat);
+    btn.classList.add('active');
+  }
+  saveFavorites(favs);
+  renderFavorites();
+}
+
+// ================= TABS =================
+function switchTab(tab) {
+  document.getElementById('searchTab').classList.toggle('hidden', tab !== 'search');
+  document.getElementById('leaderboardTab').classList.toggle('hidden', tab !== 'leaderboard');
+  document.getElementById('tabSearchBtn').classList.toggle('active', tab === 'search');
+  document.getElementById('tabLeaderboardBtn').classList.toggle('active', tab === 'leaderboard');
+  if (tab === 'leaderboard') loadLeaderboard();
+}
+
+// ================= SØG / TRACKING =================
+function startTracking() {
+  const boat = document.getElementById('boatInput').value.trim();
+  if (!boat) return;
+
+  document.getElementById('favToggleBtn').classList.toggle('active', getFavorites().includes(boat));
+
+  if (pollTimer) clearInterval(pollTimer);
+  if (tickerTimer) clearInterval(tickerTimer);
+  lastCheckpointSeen = null;
+
+  fetchStatus(boat);
+  pollTimer = setInterval(() => fetchStatus(boat), 5000);
+  tickerTimer = setInterval(updateTicker, 1000);
+
+  // Opdater URL så man kan dele direkte link
+  const url = new URL(window.location);
+  url.searchParams.set('boat', boat);
+  window.history.replaceState({}, '', url);
+}
+
+function fetchStatus(boat) {
+  fetch(`${API_URL}?boat=${encodeURIComponent(boat)}`)
+    .then(r => r.json())
+    .then(data => {
+      lastUpdateTime = new Date();
+      render(data);
+    })
+    .catch(() => {
+      document.getElementById('result').innerHTML = `<div class="error">Kunne ikke hente data. Prøv igen.</div>`;
+    });
+}
+
+function updateTicker() {
+  if (!lastUpdateTime) return;
+  const seconds = Math.floor((new Date() - lastUpdateTime) / 1000);
+  const el = document.getElementById('lastUpdateLabel');
+  if (el) el.textContent = `Opdateret for ${seconds} sek. siden`;
+}
+
+function formatTime(iso) {
+  if (!iso) return "–";
+  return new Date(iso).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function formatDuration(ms) {
+  if (ms === null || ms === undefined) return "–";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+function playPop() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) { /* lyd ikke understøttet, ignorer */ }
+}
+
+function render(data) {
+  const el = document.getElementById('result');
+  const mapContainer = document.getElementById('mapContainer');
+  const historyContainer = document.getElementById('historyContainer');
+
+  if (data.error) {
+    el.innerHTML = `<div class="error">${data.error}</div>`;
+    return;
+  }
+  if (!data.found) {
+    el.innerHTML = `<div class="card"><div class="boat-number">Båd: ${data.boat}</div><div class="status">${data.message || "Ingen data endnu"}</div></div>`;
+    mapContainer.classList.add('hidden');
+    historyContainer.classList.add('hidden');
+    return;
+  }
+
+  // Ny checkpoint-passage opdaget -> pop + lyd
+  const isNewCheckpoint = lastCheckpointSeen !== null && lastCheckpointSeen !== data.checkpoint;
+  if (lastCheckpointSeen === null) lastCheckpointSeen = data.checkpoint;
+  else if (isNewCheckpoint) {
+    lastCheckpointSeen = data.checkpoint;
+    playPop();
+  }
+
+  const pct = data.totalKm ? Math.min(100, (data.checkpointKm / data.totalKm) * 100) : 0;
+
+  el.innerHTML = `
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="progress-labels"><span>0 km</span><span>${data.checkpointKm} / ${data.totalKm} km</span></div>
+    </div>
+    <div class="card ${isNewCheckpoint ? 'pop' : ''}">
+      <div class="boat-number">Båd: ${data.boat}</div>
+
+      <div class="row">
+        <div class="label">${data.finished ? "I mål ved" : "Passerede"}</div>
+        <div class="value">${data.finished ? "Mål 🏁" : data.checkpoint}</div>
+        <div class="value">${formatTime(data.time)}</div>
+      </div>
+
+      ${!data.finished ? `
+      <div class="row">
+        <div class="label">Estimeret målgang</div>
+        <div class="value">${formatTime(data.estFinish)}</div>
+      </div>` : ''}
+
+      <div class="row">
+        <div class="label">Gennemsnitsfart</div>
+        <div class="value">${data.avgKmH !== null ? data.avgKmH.toFixed(1) + ' km/t' : '–'}</div>
+      </div>
+
+      ${data.placement ? `
+      <div class="row">
+        <div class="label">Placering${data.klasse ? " i " + data.klasse : ""}</div>
+        <div class="placement">${data.placement}</div>
+      </div>` : ''}
+
+      <div class="status" id="lastUpdateLabel">Opdateret for 0 sek. siden</div>
+    </div>
+  `;
+
+  // ---- Mini-historik med split-tider ----
+  if (data.history && data.history.length) {
+    historyContainer.classList.remove('hidden');
+    historyContainer.innerHTML = `
+      <div class="history">
+        <h3>Historik</h3>
+        ${data.history.map(h => `
+          <div class="history-item">
+            <span class="h-name">${h.name} (${h.km} km)</span>
+            <span style="text-align:right">
+              <span class="h-time">${formatTime(h.time)}</span><br>
+              ${h.splitKmH !== null ? `<span class="h-split">${formatDuration(h.splitMs)} · ${h.splitKmH.toFixed(1)} km/t</span>` : ''}
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else {
+    historyContainer.classList.add('hidden');
+  }
+
+  // ---- Kort ----
+  if (data.lat && data.lng) {
+    mapContainer.classList.remove('hidden');
+    if (!map) {
+      map = L.map('map').setView([data.lat, data.lng], 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      mapMarker = L.marker([data.lat, data.lng]).addTo(map);
+    } else {
+      mapMarker.setLatLng([data.lat, data.lng]);
+      map.panTo([data.lat, data.lng]);
+    }
+    setTimeout(() => map.invalidateSize(), 200);
+  } else {
+    mapContainer.classList.add('hidden');
+  }
+}
+
+// ================= LEADERBOARD =================
+let klasseListLoaded = false;
+
+function loadLeaderboard() {
+  const klasse = document.getElementById('klasseSelect').value;
+  fetch(`${API_URL}?action=leaderboard&klasse=${encodeURIComponent(klasse)}`)
+    .then(r => r.json())
+    .then(data => renderLeaderboard(data))
+    .catch(() => {
+      document.getElementById('leaderboardResult').innerHTML = `<div class="error">Kunne ikke hente leaderboard.</div>`;
+    });
+}
+
+function renderLeaderboard(data) {
+  const el = document.getElementById('leaderboardResult');
+  if (data.error) { el.innerHTML = `<div class="error">${data.error}</div>`; return; }
+
+  // Udfyld klasse-dropdown med unikke klasser, hvis ikke gjort endnu
+  if (!klasseListLoaded) {
+    const select = document.getElementById('klasseSelect');
+    const klasser = [...new Set(data.boats.map(b => b.klasse).filter(Boolean))];
+    klasser.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      select.appendChild(opt);
+    });
+    klasseListLoaded = true;
+  }
+
+  if (!data.boats.length) {
+    el.innerHTML = `<div class="status">Ingen data endnu for denne klasse.</div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <table>
+      <thead><tr><th>#</th><th>Båd</th><th>Klasse</th><th>Seneste CP</th><th>Tid</th></tr></thead>
+      <tbody>
+        ${data.boats.map(b => `
+          <tr>
+            <td class="rank">${b.placement}</td>
+            <td>${b.boat}</td>
+            <td>${b.klasse || '–'}</td>
+            <td>${b.finished ? 'Mål 🏁' : b.checkpoint}</td>
+            <td>${formatTime(b.time)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ================= INIT =================
+document.getElementById('boatInput').addEventListener('keypress', e => {
+  if (e.key === 'Enter') startTracking();
+});
+
+renderFavorites();
+
+// Hvis der er ?boat=124 i URL'en (delt link), start automatisk
+const params = new URLSearchParams(window.location.search);
+if (params.get('boat')) {
+  document.getElementById('boatInput').value = params.get('boat');
+  startTracking();
+}
+</script>
+
+</body>
+</html>
