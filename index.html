@@ -52,9 +52,9 @@
   }
   .card.pop { animation: popAnim 0.6s ease; }
   @keyframes popAnim {
-    0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,210,63,0); }
-    30% { transform: scale(1.04); box-shadow: 0 0 30px rgba(255,210,63,0.6); }
-    100% { transform: scale(1); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    0%   { transform: scale(1);    box-shadow: 0 0 0   rgba(255,210,63,0); }
+    30%  { transform: scale(1.04); box-shadow: 0 0 30px rgba(255,210,63,0.6); }
+    100% { transform: scale(1);    box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
   }
 
   .boat-number { font-size: 2rem; font-weight: bold; margin-bottom: 0.6rem; }
@@ -65,19 +65,19 @@
   .status { font-size: 0.8rem; color: #88a; margin-top: 0.8rem; }
   .error { color: #ff6b6b; margin-top: 1rem; }
 
-  .progress-wrap { width: 100%; max-width: 380px; margin: 0.4rem 0 1rem; }
+  .progress-wrap { width: 100%; max-width: 380px; margin: 0.4rem 0 0.8rem; }
   .progress-bar { background: #0a1c29; border-radius: 10px; height: 14px; position: relative; overflow: hidden; }
   .progress-fill { background: linear-gradient(90deg, #2e8bd1, #9fd4ff); height: 100%; border-radius: 10px; transition: width 1s ease; }
   .progress-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: #88a; margin-top: 0.3rem; }
 
-  #map { width: 100%; max-width: 380px; height: 220px; border-radius: 12px; margin-bottom: 1rem; }
+  #mapContainer { width: 100%; max-width: 380px; margin-bottom: 0.5rem; }
+  #map { width: 100%; height: 220px; border-radius: 12px; }
+  .map-note { font-size: 0.72rem; color: #667; text-align: center; margin-bottom: 0.6rem; }
 
   .history { width: 100%; max-width: 380px; background: #0f283b; border-radius: 12px; padding: 0.8rem 1rem; }
   .history h3 { font-size: 0.85rem; color: #9fd4ff; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
   .history-item { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.3rem 0; border-bottom: 1px solid #1c3a52; }
   .history-item:last-child { border-bottom: none; }
-  .history-item .h-name { color: #fff; }
-  .history-item .h-time { color: #9fd4ff; }
   .history-item .h-split { color: #ffd23f; font-size: 0.8rem; }
 
   table { width: 100%; max-width: 480px; border-collapse: collapse; background: #133247; border-radius: 12px; overflow: hidden; }
@@ -91,7 +91,7 @@
 </head>
 <body>
 
-<h1>🛶 Tour de Gudenå — Livetracker</h1>
+<h1>🛶 Tour de Gudenå - Livetracker</h1>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabSearchBtn" onclick="switchTab('search')">Søg båd</button>
@@ -105,11 +105,12 @@
     <button onclick="startTracking()">Find</button>
     <button class="fav-btn" id="favToggleBtn" onclick="toggleFavorite()">★</button>
   </div>
-
   <div class="favorites-row" id="favoritesRow"></div>
-
   <div id="result"></div>
-  <div id="mapContainer" class="hidden"><div id="map"></div></div>
+  <div id="mapContainer" class="hidden">
+    <div id="map"></div>
+    <div class="map-note">⚠️ Position er estimeret langs ruten mellem checkpoints</div>
+  </div>
   <div id="historyContainer" class="hidden"></div>
 </div>
 
@@ -123,50 +124,185 @@
   <div id="leaderboardResult"></div>
 </div>
 
-<audio id="popSound" preload="auto">
-  <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav">
-</audio>
-
 <script>
-// ---- INDSÆT DIN APPS SCRIPT WEB APP URL HER ----
+// =================================================================
+// KONFIGURATION – ret disse to linjer
+// =================================================================
+
+// Din Apps Script Web App URL:
 const API_URL = "https://script.google.com/macros/s/AKfycbwC3a8LSVWhg-Wo7oB2fEaPKh3uY9Inf-T1Rc_dcQz5AxhmKLxH9piQl6lxiJdEn8zf/exec";
 
-let pollTimer = null;
-let lastUpdateTime = null;
-let lastCheckpointSeen = null;
-let map = null;
-let mapMarker = null;
-let tickerTimer = null;
+// URL til din route.geojson (GeoJSON LineString med rutens koordinater).
+// Læg filen på GitHub Pages ved siden af denne HTML-fil og brug:
+//   const ROUTE_URL = "./route.geojson";
+// Eller sæt den til null for at falde tilbage til fuglflugt-interpolation:
+const ROUTE_URL = "./route.geojson";
 
-// ================= FAVORITTER (localStorage) =================
-function getFavorites() {
-  return JSON.parse(localStorage.getItem('gudenaa_favorites') || '[]');
-}
-function saveFavorites(list) {
-  localStorage.setItem('gudenaa_favorites', JSON.stringify(list));
-}
-function renderFavorites() {
-  const row = document.getElementById('favoritesRow');
-  const favs = getFavorites();
-  row.innerHTML = favs.map(b => `<button onclick="document.getElementById('boatInput').value='${b}'; startTracking();">★ ${b}</button>`).join('');
-}
-function toggleFavorite() {
-  const boat = document.getElementById('boatInput').value.trim();
-  if (!boat) return;
-  let favs = getFavorites();
-  const btn = document.getElementById('favToggleBtn');
-  if (favs.includes(boat)) {
-    favs = favs.filter(b => b !== boat);
-    btn.classList.remove('active');
-  } else {
-    favs.push(boat);
-    btn.classList.add('active');
+// =================================================================
+
+// ---- Globale variable ----
+let pollTimer     = null;
+let interpolTimer = null;
+let tickerTimer   = null;
+let lastUpdateTime      = null;
+let lastCheckpointSeen  = null;
+let map        = null;
+let mapMarker  = null;
+let routeLine  = null;
+
+// Rutens punkter som array af {lat, lng} – udfyldes når GeoJSON er loadet
+let routePoints = [];
+
+// Interpolationsstate – opdateres ved hvert API-svar
+let boatGeo = null;
+
+// =================================================================
+// RUTE-HÅNDTERING
+// =================================================================
+
+async function loadRoute() {
+  if (!ROUTE_URL) return;
+  try {
+    const res = await fetch(ROUTE_URL);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const geojson = await res.json();
+
+    // Understøt både FeatureCollection og rå LineString/MultiLineString
+    let coords = null;
+    if (geojson.type === "FeatureCollection") {
+      const feature = geojson.features.find(f =>
+        f.geometry.type === "LineString" || f.geometry.type === "MultiLineString"
+      );
+      if (feature) {
+        coords = feature.geometry.type === "MultiLineString"
+          ? feature.geometry.coordinates.flat()
+          : feature.geometry.coordinates;
+      }
+    } else if (geojson.type === "Feature") {
+      coords = geojson.geometry.type === "MultiLineString"
+        ? geojson.geometry.coordinates.flat()
+        : geojson.geometry.coordinates;
+    } else if (geojson.type === "LineString") {
+      coords = geojson.coordinates;
+    }
+
+    if (!coords || coords.length === 0) {
+      console.warn("Ingen LineString-koordinater fundet i route.geojson");
+      return;
+    }
+
+    // GeoJSON-koordinater er [lng, lat] – vi vender dem til {lat, lng}
+    routePoints = coords.map(c => ({ lat: c[1], lng: c[0] }));
+    console.log(`Rute loadet: ${routePoints.length} punkter`);
+  } catch (err) {
+    console.warn("Kunne ikke loade route.geojson – falder tilbage til fugleflugt.", err);
+    routePoints = [];
   }
-  saveFavorites(favs);
-  renderFavorites();
 }
 
-// ================= TABS =================
+// Euklidisk afstand mellem to {lat,lng}-punkter (god nok til interpolation)
+function ptDist(a, b) {
+  const dlat = a.lat - b.lat;
+  const dlng = a.lng - b.lng;
+  return Math.sqrt(dlat * dlat + dlng * dlng);
+}
+
+// Find indekset i routePoints der er nærmest en given {lat, lng}
+function nearestRouteIndex(latLng) {
+  if (routePoints.length === 0) return -1;
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  routePoints.forEach((p, i) => {
+    const d = ptDist(p, latLng);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
+// Interpoler langs route-segmentet [fromIdx → toIdx] ved en given fraction (0–1).
+// Returnerer {lat, lng}.
+function interpolateAlongRoute(fromIdx, toIdx, fraction) {
+  // Sikr at vi går fremad langs ruten
+  const start = Math.min(fromIdx, toIdx);
+  const end   = Math.max(fromIdx, toIdx);
+
+  if (start === end || routePoints.length === 0) {
+    // Ingen rute tilgængelig – brug lineær interpolation direkte
+    return null;
+  }
+
+  const segment = routePoints.slice(start, end + 1);
+  if (segment.length < 2) return null;
+
+  // Beregn kumulativ afstand langs segmentet
+  const cumDist = [0];
+  for (let i = 1; i < segment.length; i++) {
+    cumDist.push(cumDist[i - 1] + ptDist(segment[i - 1], segment[i]));
+  }
+  const totalDist = cumDist[cumDist.length - 1];
+  if (totalDist === 0) return null;
+
+  const target = fraction * totalDist;
+
+  // Find det segment-stykke der indeholder target-afstanden
+  for (let i = 1; i < segment.length; i++) {
+    if (cumDist[i] >= target) {
+      const segFrac = (target - cumDist[i - 1]) / (cumDist[i] - cumDist[i - 1]);
+      return {
+        lat: segment[i - 1].lat + segFrac * (segment[i].lat - segment[i - 1].lat),
+        lng: segment[i - 1].lng + segFrac * (segment[i].lng - segment[i - 1].lng)
+      };
+    }
+  }
+  return segment[segment.length - 1];
+}
+
+// =================================================================
+// INTERPOLATIONS-LOOP (kører hvert sekund)
+// =================================================================
+
+function startInterpolation() {
+  if (interpolTimer) clearInterval(interpolTimer);
+  interpolTimer = setInterval(stepInterpolation, 1000);
+}
+
+function stepInterpolation() {
+  const g = boatGeo;
+  if (!g || !map || !mapMarker) return;
+  if (!g.nextLat || !g.paceKmH || g.paceKmH <= 0) return;
+
+  const elapsedMs    = Date.now() - g.lastTime;
+  const remainingKm  = g.nextKm - g.currentKm;
+  const remainingMs  = (remainingKm / g.paceKmH) * 3600000;
+
+  // fraction: 0 = ved nuværende CP, 1 = ved næste CP
+  let fraction = remainingMs > 0 ? elapsedMs / remainingMs : 0;
+  fraction = Math.max(0, Math.min(0.98, fraction)); // clamp, aldrig over næste CP
+
+  let pos = null;
+
+  if (routePoints.length > 0) {
+    // Interpoler langs den faktiske rute
+    const fromIdx = nearestRouteIndex({ lat: g.lastLat, lng: g.lastLng });
+    const toIdx   = nearestRouteIndex({ lat: g.nextLat, lng: g.nextLng });
+    pos = interpolateAlongRoute(fromIdx, toIdx, fraction);
+  }
+
+  // Fallback: direkte linjær interpolation
+  if (!pos) {
+    pos = {
+      lat: g.lastLat + fraction * (g.nextLat - g.lastLat),
+      lng: g.lastLng + fraction * (g.nextLng - g.lastLng)
+    };
+  }
+
+  mapMarker.setLatLng([pos.lat, pos.lng]);
+}
+
+// =================================================================
+// TABS
+// =================================================================
+
 function switchTab(tab) {
   document.getElementById('searchTab').classList.toggle('hidden', tab !== 'search');
   document.getElementById('leaderboardTab').classList.toggle('hidden', tab !== 'leaderboard');
@@ -175,22 +311,50 @@ function switchTab(tab) {
   if (tab === 'leaderboard') loadLeaderboard();
 }
 
-// ================= SØG / TRACKING =================
+// =================================================================
+// FAVORITTER
+// =================================================================
+
+function getFavorites() { return JSON.parse(localStorage.getItem('gudenaa_favorites') || '[]'); }
+function saveFavorites(list) { localStorage.setItem('gudenaa_favorites', JSON.stringify(list)); }
+
+function renderFavorites() {
+  const row  = document.getElementById('favoritesRow');
+  const favs = getFavorites();
+  row.innerHTML = favs.map(b =>
+    `<button onclick="document.getElementById('boatInput').value='${b}'; startTracking();">★ ${b}</button>`
+  ).join('');
+}
+
+function toggleFavorite() {
+  const boat = document.getElementById('boatInput').value.trim();
+  if (!boat) return;
+  let favs = getFavorites();
+  const btn = document.getElementById('favToggleBtn');
+  if (favs.includes(boat)) { favs = favs.filter(b => b !== boat); btn.classList.remove('active'); }
+  else                      { favs.push(boat);                     btn.classList.add('active');    }
+  saveFavorites(favs);
+  renderFavorites();
+}
+
+// =================================================================
+// TRACKING
+// =================================================================
+
 function startTracking() {
   const boat = document.getElementById('boatInput').value.trim();
   if (!boat) return;
 
   document.getElementById('favToggleBtn').classList.toggle('active', getFavorites().includes(boat));
 
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer)   clearInterval(pollTimer);
   if (tickerTimer) clearInterval(tickerTimer);
   lastCheckpointSeen = null;
 
   fetchStatus(boat);
-  pollTimer = setInterval(() => fetchStatus(boat), 5000);
+  pollTimer   = setInterval(() => fetchStatus(boat), 5000);
   tickerTimer = setInterval(updateTicker, 1000);
 
-  // Opdater URL så man kan dele direkte link
   const url = new URL(window.location);
   url.searchParams.set('boat', boat);
   window.history.replaceState({}, '', url);
@@ -199,10 +363,7 @@ function startTracking() {
 function fetchStatus(boat) {
   fetch(`${API_URL}?boat=${encodeURIComponent(boat)}`)
     .then(r => r.json())
-    .then(data => {
-      lastUpdateTime = new Date();
-      render(data);
-    })
+    .then(data => { lastUpdateTime = new Date(); render(data); })
     .catch(() => {
       document.getElementById('result').innerHTML = `<div class="error">Kunne ikke hente data. Prøv igen.</div>`;
     });
@@ -210,10 +371,14 @@ function fetchStatus(boat) {
 
 function updateTicker() {
   if (!lastUpdateTime) return;
-  const seconds = Math.floor((new Date() - lastUpdateTime) / 1000);
-  const el = document.getElementById('lastUpdateLabel');
-  if (el) el.textContent = `Opdateret for ${seconds} sek. siden`;
+  const sek = Math.floor((new Date() - lastUpdateTime) / 1000);
+  const el  = document.getElementById('lastUpdateLabel');
+  if (el) el.textContent = `Opdateret for ${sek} sek. siden`;
 }
+
+// =================================================================
+// FORMATERING
+// =================================================================
 
 function formatTime(iso) {
   if (!iso) return "–";
@@ -221,17 +386,21 @@ function formatTime(iso) {
 }
 function formatDuration(ms) {
   if (ms === null || ms === undefined) return "–";
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
 }
+
+// =================================================================
+// LYD (Web Audio API – ingen ekstern fil nødvendig)
+// =================================================================
 
 function playPop() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(880, ctx.currentTime);
@@ -239,14 +408,17 @@ function playPop() {
     gain.gain.setValueAtTime(0.25, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-  } catch (e) { /* lyd ikke understøttet, ignorer */ }
+    osc.start(); osc.stop(ctx.currentTime + 0.4);
+  } catch (e) { /* lyd ikke understøttet */ }
 }
 
+// =================================================================
+// RENDER
+// =================================================================
+
 function render(data) {
-  const el = document.getElementById('result');
-  const mapContainer = document.getElementById('mapContainer');
+  const el               = document.getElementById('result');
+  const mapContainer     = document.getElementById('mapContainer');
   const historyContainer = document.getElementById('historyContainer');
 
   if (data.error) {
@@ -260,13 +432,10 @@ function render(data) {
     return;
   }
 
-  // Ny checkpoint-passage opdaget -> pop + lyd
-  const isNewCheckpoint = lastCheckpointSeen !== null && lastCheckpointSeen !== data.checkpoint;
+  // Ny checkpoint-passage?
+  const isNew = lastCheckpointSeen !== null && lastCheckpointSeen !== data.checkpoint;
   if (lastCheckpointSeen === null) lastCheckpointSeen = data.checkpoint;
-  else if (isNewCheckpoint) {
-    lastCheckpointSeen = data.checkpoint;
-    playPop();
-  }
+  else if (isNew) { lastCheckpointSeen = data.checkpoint; playPop(); }
 
   const pct = data.totalKm ? Math.min(100, (data.checkpointKm / data.totalKm) * 100) : 0;
 
@@ -275,37 +444,32 @@ function render(data) {
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
       <div class="progress-labels"><span>0 km</span><span>${data.checkpointKm} / ${data.totalKm} km</span></div>
     </div>
-    <div class="card ${isNewCheckpoint ? 'pop' : ''}">
+    <div class="card ${isNew ? 'pop' : ''}">
       <div class="boat-number">Båd: ${data.boat}</div>
-
       <div class="row">
         <div class="label">${data.finished ? "I mål ved" : "Passerede"}</div>
         <div class="value">${data.finished ? "Mål 🏁" : data.checkpoint}</div>
         <div class="value">${formatTime(data.time)}</div>
       </div>
-
       ${!data.finished ? `
       <div class="row">
         <div class="label">Estimeret målgang</div>
         <div class="value">${formatTime(data.estFinish)}</div>
       </div>` : ''}
-
       <div class="row">
         <div class="label">Gennemsnitsfart</div>
         <div class="value">${data.avgKmH !== null ? data.avgKmH.toFixed(1) + ' km/t' : '–'}</div>
       </div>
-
       ${data.placement ? `
       <div class="row">
         <div class="label">Placering${data.klasse ? " i " + data.klasse : ""}</div>
         <div class="placement">${data.placement}</div>
       </div>` : ''}
-
       <div class="status" id="lastUpdateLabel">Opdateret for 0 sek. siden</div>
     </div>
   `;
 
-  // ---- Mini-historik med split-tider ----
+  // ---- Mini-historik ----
   if (data.history && data.history.length) {
     historyContainer.classList.remove('hidden');
     historyContainer.innerHTML = `
@@ -315,13 +479,13 @@ function render(data) {
           <div class="history-item">
             <span class="h-name">${h.name} (${h.km} km)</span>
             <span style="text-align:right">
-              <span class="h-time">${formatTime(h.time)}</span><br>
-              ${h.splitKmH !== null ? `<span class="h-split">${formatDuration(h.splitMs)} · ${h.splitKmH.toFixed(1)} km/t</span>` : ''}
+              <span style="color:#9fd4ff">${formatTime(h.time)}</span><br>
+              ${h.splitKmH !== null
+                ? `<span class="h-split">${formatDuration(h.splitMs)} · ${h.splitKmH.toFixed(1)} km/t</span>`
+                : ''}
             </span>
-          </div>
-        `).join('')}
-      </div>
-    `;
+          </div>`).join('')}
+      </div>`;
   } else {
     historyContainer.classList.add('hidden');
   }
@@ -329,23 +493,62 @@ function render(data) {
   // ---- Kort ----
   if (data.lat && data.lng) {
     mapContainer.classList.remove('hidden');
+
     if (!map) {
       map = L.map('map').setView([data.lat, data.lng], 11);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap'
       }).addTo(map);
-      mapMarker = L.marker([data.lat, data.lng]).addTo(map);
-    } else {
-      mapMarker.setLatLng([data.lat, data.lng]);
-      map.panTo([data.lat, data.lng]);
+
+      // Tegn rutelinjen hvis vi har den
+      if (routePoints.length > 0) {
+        routeLine = L.polyline(
+          routePoints.map(p => [p.lat, p.lng]),
+          { color: '#2e8bd1', weight: 3, opacity: 0.7 }
+        ).addTo(map);
+      }
+
+      // Båd-markør med lille kajak-ikon
+      const boatIcon = L.divIcon({
+        html: '🛶',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        className: ''
+      });
+      mapMarker = L.marker([data.lat, data.lng], { icon: boatIcon }).addTo(map);
     }
-    setTimeout(() => map.invalidateSize(), 200);
+
+    // Opdater interpolations-state
+    const lastSplit = data.history && data.history.length > 1
+      ? data.history[data.history.length - 1].splitKmH
+      : data.avgKmH;
+
+    boatGeo = {
+      lastLat:   data.lat,
+      lastLng:   data.lng,
+      lastTime:  new Date(data.time).getTime(),
+      nextLat:   data.nextCheckpoint ? data.nextCheckpoint.lat : null,
+      nextLng:   data.nextCheckpoint ? data.nextCheckpoint.lng : null,
+      nextKm:    data.nextCheckpoint ? data.nextCheckpoint.km  : null,
+      currentKm: data.checkpointKm,
+      paceKmH:   lastSplit || data.avgKmH
+    };
+
+    // Sæt markøren direkte ved det seneste checkpoint med det samme
+    mapMarker.setLatLng([data.lat, data.lng]);
+    map.panTo([data.lat, data.lng]);
+    setTimeout(() => map.invalidateSize(), 500);
+
+    startInterpolation();
   } else {
     mapContainer.classList.add('hidden');
   }
 }
 
-// ================= LEADERBOARD =================
+// =================================================================
+// LEADERBOARD
+// =================================================================
+
 let klasseListLoaded = false;
 
 function loadLeaderboard() {
@@ -362,9 +565,8 @@ function renderLeaderboard(data) {
   const el = document.getElementById('leaderboardResult');
   if (data.error) { el.innerHTML = `<div class="error">${data.error}</div>`; return; }
 
-  // Udfyld klasse-dropdown med unikke klasser, hvis ikke gjort endnu
   if (!klasseListLoaded) {
-    const select = document.getElementById('klasseSelect');
+    const select  = document.getElementById('klasseSelect');
     const klasser = [...new Set(data.boats.map(b => b.klasse).filter(Boolean))];
     klasser.forEach(k => {
       const opt = document.createElement('option');
@@ -390,21 +592,23 @@ function renderLeaderboard(data) {
             <td>${b.klasse || '–'}</td>
             <td>${b.finished ? 'Mål 🏁' : b.checkpoint}</td>
             <td>${formatTime(b.time)}</td>
-          </tr>
-        `).join('')}
+          </tr>`).join('')}
       </tbody>
-    </table>
-  `;
+    </table>`;
 }
 
-// ================= INIT =================
+// =================================================================
+// INIT
+// =================================================================
+
 document.getElementById('boatInput').addEventListener('keypress', e => {
   if (e.key === 'Enter') startTracking();
 });
 
 renderFavorites();
+loadRoute(); // load rutedata i baggrunden ved side-start
 
-// Hvis der er ?boat=124 i URL'en (delt link), start automatisk
+// Automatisk opslag hvis ?boat=124 er i URL'en (delt link)
 const params = new URLSearchParams(window.location.search);
 if (params.get('boat')) {
   document.getElementById('boatInput').value = params.get('boat');
